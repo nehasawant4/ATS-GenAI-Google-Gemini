@@ -5,7 +5,6 @@ import base64
 import streamlit as st
 import os
 import io
-from PIL import Image
 import pdf2image
 import google.generativeai as genai
 
@@ -52,20 +51,27 @@ if uploaded_file is not None:
 
 submit1 = st.button("Tell Me About My Resume")
 
-#submit2 = st.button("How Can I Improvise my Skills")
-
-submit3 = st.button("Percentage Match")
+submit2 = st.button("Percentage Match")
 
 input_prompt1 = """
- You are an experienced Technical Human Resource Manager,your task is to review the provided resume against the job description. 
-  Please share your professional evaluation on whether the candidate's profile aligns with the role. 
- Highlight the strengths and weaknesses of the applicant in relation to the specified job requirements.
+You are an experienced Technical Human Resource Manager. 
+Your task is to review the provided resume against the specified job description and share your professional evaluation on whether the candidate's profile aligns with the role. 
+Highlight the strengths and weaknesses of the applicant in relation to the job requirements.
+
+For each resume, provide the following:
+Technical Skills: Evaluate the relevance and proficiency of technical skills listed.
+Experience: Assess the candidate’s previous experience and how it aligns with the job responsibilities.
+Education: Review the educational qualifications and their relevance to the job profile.
+Additional Skills: Note any additional skills or experiences that are beneficial for the role.
+Overall Fit: Provide an overall assessment of how well the candidate fits the job profile, highlighting strengths and potential areas of concern.
 """
 
-input_prompt3 = """
-You are an skilled ATS (Applicant Tracking System) scanner with a deep understanding of data science and ATS functionality, 
-your task is to evaluate the resume against the provided job description. give me the percentage of match if the resume matches
-the job description. First the output should come as percentage and then keywords missing and last final thoughts.
+input_prompt2 = """
+You are a skilled ATS (Applicant Tracking System) scanner with a deep understanding of data science and ATS functionality. Your task is to evaluate the provided resume against the given job description. Follow these steps:
+
+Calculate the percentage match based on keyword comparison between the job description and the resume.
+List the keywords from the job description that are missing in the resume.
+Provide final thoughts on the candidate's suitability for the role.
 """
 
 if submit1:
@@ -75,13 +81,13 @@ if submit1:
         st.subheader("Response:")
         st.write(response)
     else:
-        st.write("Please Uplaod Your Resume")
+        st.write("Please Upload Your Resume")
 
-elif submit3:
+elif submit2:
     if uploaded_file is not None:
         pdf_content=input_pdf_setup(uploaded_file)
-        response=get_gemini_response(input_prompt3,pdf_content,input_text)
+        response=get_gemini_response(input_prompt2,pdf_content,input_text)
         st.subheader("Response:")
         st.write(response)
     else:
-        st.write("Please Uplaod Your Resume")
+        st.write("Please Upload Your Resume")
