@@ -3,26 +3,16 @@ from dotenv import load_dotenv
 load_dotenv()
 import base64
 import streamlit as st
-import os
 import io
 import pdf2image
-import google.generativeai as genai
-
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-
-def get_gemini_response(input,pdf_content,prompt):
-    model=genai.GenerativeModel('gemini-pro-vision')
-    response=model.generate_content([input,pdf_content[0],prompt])
-    return response.text
+from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 def input_pdf_setup(uploaded_file):
     if uploaded_file is not None:
-        ## Convert the PDF to image
-        images=pdf2image.convert_from_bytes(uploaded_file.read())
+        images = pdf2image.convert_from_bytes(uploaded_file.read())
 
-        first_page=images[0]
+        first_page = images[0]
 
-        # Convert to bytes
         img_byte_arr = io.BytesIO()
         first_page.save(img_byte_arr, format='JPEG')
         img_byte_arr = img_byte_arr.getvalue()
@@ -30,27 +20,32 @@ def input_pdf_setup(uploaded_file):
         pdf_parts = [
             {
                 "mime_type": "image/jpeg",
-                "data": base64.b64encode(img_byte_arr).decode()  # encode to base64
+                "data": base64.b64encode(img_byte_arr).decode()
             }
         ]
         return pdf_parts
     else:
         raise FileNotFoundError("No file uploaded")
 
-## Streamlit App
+def evaluate_with_fine_tuned_model(job_description, resume):
+    model = TFAutoModelForSequenceClassification.from_pretrained('./fine_tuned_model')
+    tokenizer = AutoTokenizer.from_pretrained('./fine_tuned_model')
+
+    inputs = tokenizer(job_description, resume, return_tensors="tf", truncation=True, padding="max_length", max_length=512)
+    outputs = model(inputs)
+    scores = outputs.logits.numpy()
+    return scores
+
 
 st.set_page_config(page_title="ATS Resume Expert")
 st.header("ATS Tracking System")
-input_text=st.text_area("Job Description: ",key="input")
-uploaded_file=st.file_uploader("Upload Your Resume (PDF): ", type=["pdf"])
-
+input_text = st.text_area("Job Description: ", key="input")
+uploaded_file = st.file_uploader("Upload Your Resume (PDF): ", type=["pdf"])
 
 if uploaded_file is not None:
     st.write("PDF Uploaded Successfully")
 
-
 submit1 = st.button("Tell Me About My Resume")
-
 submit2 = st.button("Percentage Match")
 
 input_prompt1 = """
@@ -76,8 +71,9 @@ Provide final thoughts on the candidate's suitability for the role.
 
 if submit1:
     if uploaded_file is not None:
-        pdf_content=input_pdf_setup(uploaded_file)
-        response=get_gemini_response(input_prompt1,pdf_content,input_text)
+        pdf_content = input_pdf_setup(uploaded_file)
+        resume_text = pdf_content[0]['data'] 
+        response = evaluate_with_fine_tuned_model(input_text, resume_text)
         st.subheader("Response:")
         st.write(response)
     else:
@@ -85,8 +81,9 @@ if submit1:
 
 elif submit2:
     if uploaded_file is not None:
-        pdf_content=input_pdf_setup(uploaded_file)
-        response=get_gemini_response(input_prompt2,pdf_content,input_text)
+        pdf_content = input_pdf_setup(uploaded_file)
+        resume_text = pdf_content[0]['data']
+        response = evaluate_with_fine_tuned_model(input_text, resume_text)
         st.subheader("Response:")
         st.write(response)
     else:
