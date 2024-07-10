@@ -1,5 +1,3 @@
-# train_model.py
-
 import pandas as pd
 from datasets import Dataset
 from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
@@ -37,7 +35,7 @@ def fine_tune_model(dataset_path):
     tf_dataset = tf_dataset.shuffle(len(tokenized_dataset)).batch(16)
 
     # Define optimizer, loss, and metrics
-    optimizer = tf.keras.optimizers.Adam(learning_rate=2e-5)
+    optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=2e-5)
     loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
     metric = tf.keras.metrics.SparseCategoricalAccuracy()
 

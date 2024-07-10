@@ -1,42 +1,76 @@
-from dotenv import load_dotenv
-
-load_dotenv()
-import base64
 import streamlit as st
+import re
 import io
+import os
+import base64
+from collections import Counter
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+import nltk
 import pdf2image
-from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
+import pytesseract
+from PIL import Image
+from dotenv import load_dotenv
+import google.generativeai as genai
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Configure Google Gemini with a text model
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+
+
+def get_gemini_response(prompt, job_description, resume_text):
+    input_text = f"""
+    {prompt}
+
+    Job Description:
+    {job_description}
+
+    Resume:
+    {resume_text}
+    """
+    model = genai.GenerativeModel('gemini-pro')
+    response = model.generate_content([input_text])
+    return response.text
+
 
 def input_pdf_setup(uploaded_file):
     if uploaded_file is not None:
         images = pdf2image.convert_from_bytes(uploaded_file.read())
-
-        first_page = images[0]
-
-        img_byte_arr = io.BytesIO()
-        first_page.save(img_byte_arr, format='JPEG')
-        img_byte_arr = img_byte_arr.getvalue()
-
-        pdf_parts = [
-            {
-                "mime_type": "image/jpeg",
-                "data": base64.b64encode(img_byte_arr).decode()
-            }
-        ]
-        return pdf_parts
+        text = ""
+        for image in images:
+            text += extract_text_from_image(image) + " "
+        return text.strip()
     else:
         raise FileNotFoundError("No file uploaded")
 
-def evaluate_with_fine_tuned_model(job_description, resume):
-    model = TFAutoModelForSequenceClassification.from_pretrained('./fine_tuned_model')
-    tokenizer = AutoTokenizer.from_pretrained('./fine_tuned_model')
 
-    inputs = tokenizer(job_description, resume, return_tensors="tf", truncation=True, padding="max_length", max_length=512)
-    outputs = model(inputs)
-    scores = outputs.logits.numpy()
-    return scores
+def extract_text_from_image(image):
+    return pytesseract.image_to_string(image)
 
 
+nltk.download('punkt')
+nltk.download('stopwords')
+
+
+def extract_keywords(text):
+    words = word_tokenize(text.lower())
+    custom_stopwords = set(stopwords.words('english')) - {"must", "required"}
+    keywords = [word for word in words if word.isalpha() and word not in custom_stopwords]
+    return set(keywords)
+
+
+def calculate_match(job_description, resume):
+    jd_keywords = extract_keywords(job_description)
+    resume_keywords = extract_keywords(resume)
+    common_keywords = jd_keywords.intersection(resume_keywords)
+    missing_keywords = jd_keywords.difference(resume_keywords)
+    match_percentage = (len(common_keywords) / len(jd_keywords)) * 100 if jd_keywords else 0
+    return match_percentage, missing_keywords
+
+
+# Streamlit App
 st.set_page_config(page_title="ATS Resume Expert")
 st.header("ATS Tracking System")
 input_text = st.text_area("Job Description: ", key="input")
@@ -61,30 +95,21 @@ Additional Skills: Note any additional skills or experiences that are beneficial
 Overall Fit: Provide an overall assessment of how well the candidate fits the job profile, highlighting strengths and potential areas of concern.
 """
 
-input_prompt2 = """
-You are a skilled ATS (Applicant Tracking System) scanner with a deep understanding of data science and ATS functionality. Your task is to evaluate the provided resume against the given job description. Follow these steps:
-
-Calculate the percentage match based on keyword comparison between the job description and the resume.
-List the keywords from the job description that are missing in the resume.
-Provide final thoughts on the candidate's suitability for the role.
-"""
-
 if submit1:
     if uploaded_file is not None:
-        pdf_content = input_pdf_setup(uploaded_file)
-        resume_text = pdf_content[0]['data'] 
-        response = evaluate_with_fine_tuned_model(input_text, resume_text)
+        resume_text = input_pdf_setup(uploaded_file)
+        response = get_gemini_response(input_prompt1, input_text, resume_text)
         st.subheader("Response:")
         st.write(response)
     else:
         st.write("Please Upload Your Resume")
 
-elif submit2:
+if submit2:
     if uploaded_file is not None:
-        pdf_content = input_pdf_setup(uploaded_file)
-        resume_text = pdf_content[0]['data']
-        response = evaluate_with_fine_tuned_model(input_text, resume_text)
+        resume_text = input_pdf_setup(uploaded_file)
+        match_percentage, missing_keywords = calculate_match(input_text, resume_text)
         st.subheader("Response:")
-        st.write(response)
+        st.write(f"Percentage Match: {match_percentage:.2f}%")
+        st.write(f"Missing Keywords: {', '.join(missing_keywords)}")
     else:
         st.write("Please Upload Your Resume")
